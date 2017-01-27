@@ -58,93 +58,67 @@ app.post('/store', function(req, res) {
         spotifyApi.setRefreshToken(data.body['refresh_token']);
       }
       if (req.body.text.trim().length === 0) {
-          return res.send('Enter the name of a song and the name of the artist, separated by a "-"\nExample: Blue (Da Ba Dee) - Eiffel 65');
-      }
+        return res.send('Enter the name of a song and the name of the artist, separated by a "-"\nExample: Blue (Da Ba Dee) - Eiffel 65');
+      } else {
+        if (req.body.text.indexOf(' - ') === -1) {
+          var query = 'track:' + req.body.text;
+        } else { 
+          var pieces = req.body.text.split(' - ');
+          var query = 'artist:' + pieces[0].trim() + ' track:' + pieces[1].trim();
+        }
+        spotifyApi.searchTracks(query)
+          .then(function(data) {
+            var results = data.body.tracks.items;
+            if (results.length === 0) {
+              request({
+                url: req.body.response_url,
+                method: "POST",
+                json: true,
+                headers: {
+                    "content-type": "application/json",
+                },
+                body: JSON.stringify({
+                  text: 'Could not find that track.'
+                })
 
-      res.send('Please wait while we try to find your requested song.')
+              }, function (error, response, body) {})
 
-      if (req.body.text.indexOf(' - ') === -1) {
-        var query = 'track:' + req.body.text;
-      } else { 
-        var pieces = req.body.text.split(' - ');
-        var query = 'artist:' + pieces[0].trim() + ' track:' + pieces[1].trim();
-      }
-      spotifyApi.searchTracks(query)
-        .then(function(data) {
-          var results = data.body.tracks.items;
-          var msg = '';
-          if (results.length === 0) {
-            msg = 'Could not find that track.'
+            } else {
 
-            request({
-              url: response_url,
-              method: "POST",
-              json: true,
-              headers: {
-                  "content-type": "application/json",
-              },
-              body: msg
+              var track = results[0];
+              spotifyApi.addTracksToPlaylist(process.env.SPOTIFY_USERNAME, process.env.SPOTIFY_PLAYLIST_ID, ['spotify:track:' + track.id])
+                .then(function(data) {
 
-              }, function (error, response, body) {
-              if (!error && response.statusCode === 200) {
-                  callback(body);
-              }
-              else {
-                  console.log("error: " + error)
-                  console.log("response.statusCode: " + response.statusCode)
-                  console.log("response.statusText: " + response.statusText)
-              }
-            });
-          } else {
-            var track = results[0];
-            spotifyApi.addTracksToPlaylist(process.env.SPOTIFY_USERNAME, process.env.SPOTIFY_PLAYLIST_ID, ['spotify:track:' + track.id])
-              .then(function(data) {
+                  request({
+                    url: req.body.response_url,
+                    method: "POST",
+                    json: true,
+                    headers: {
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      text: 'Track added: *' + track.name + '* by *' + track.artists[0].name + '*'
+                    })
 
+                  }, function (error, response, body) {})
+                }, function(err) {
+                  request({
+                    url: req.body.response_url,
+                    method: "POST",
+                    json: true,
+                    headers: {
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      text: err.message
+                    })
 
-                request({
-                  url: req.body.response_url,
-                  method: "POST",
-                  json: true,
-                  headers: {
-                      "content-type": "application/json",
-                  },
-                  body: 'Track added: *' + track.name + '* by *' + track.artists[0].name + '*'
-
-                  }, function (error, response, body) {
-                  if (!error && response.statusCode === 200) {
-                      callback(body);
-                  }
-                  else {
-                      console.log("error: " + error)
-                      console.log("response.statusCode: " + response.statusCode)
-                      console.log("response.statusText: " + response.statusText)
-                  }
+                  }, function (error, response, body) {})
                 });
-              }, function(err) {
-                request({
-                  url: req.body.response_url,
-                  method: "POST",
-                  json: true,
-                  headers: {
-                      "content-type": "application/json",
-                  },
-                  body: err.message
-
-                  }, function (error, response, body) {
-                  if (!error && response.statusCode === 200) {
-                      callback(body);
-                  }
-                  else {
-                      console.log("error: " + error)
-                      console.log("response.statusCode: " + response.statusCode)
-                      console.log("response.statusText: " + response.statusText)
-                  }
-                });
-              });
-          }
-        }, function(err) {
-          return res.send(err.message);
-        });
+            };
+        })
+        return res.send('Searching for your requested song...')
+      }
     }, function(err) {
       return res.send('Could not refresh access token. You probably need to re-authorise yourself from your app\'s homepage.');
     });
