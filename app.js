@@ -60,6 +60,9 @@ app.post('/store', function(req, res) {
       if (req.body.text.trim().length === 0) {
           return res.send('Enter the name of a song and the name of the artist, separated by a "-"\nExample: Blue (Da Ba Dee) - Eiffel 65');
       }
+
+      res.send('Please wait while we try to find your requested song.')
+
       if (req.body.text.indexOf(' - ') === -1) {
         var query = 'track:' + req.body.text;
       } else { 
@@ -69,16 +72,76 @@ app.post('/store', function(req, res) {
       spotifyApi.searchTracks(query)
         .then(function(data) {
           var results = data.body.tracks.items;
+          var msg = '';
           if (results.length === 0) {
-            return res.send('Could not find that track.');
-          }
-          var track = results[0];
-          spotifyApi.addTracksToPlaylist(process.env.SPOTIFY_USERNAME, process.env.SPOTIFY_PLAYLIST_ID, ['spotify:track:' + track.id])
-            .then(function(data) {
-              return res.send('Track added: *' + track.name + '* by *' + track.artists[0].name + '*');
-            }, function(err) {
-              return res.send(err.message);
+            msg = 'Could not find that track.'
+
+            request({
+              url: response_url,
+              method: "POST",
+              json: true,
+              headers: {
+                  "content-type": "application/json",
+              },
+              body: msg
+
+              }, function (error, response, body) {
+              if (!error && response.statusCode === 200) {
+                  callback(body);
+              }
+              else {
+                  console.log("error: " + error)
+                  console.log("response.statusCode: " + response.statusCode)
+                  console.log("response.statusText: " + response.statusText)
+              }
             });
+          } else {
+            var track = results[0];
+            spotifyApi.addTracksToPlaylist(process.env.SPOTIFY_USERNAME, process.env.SPOTIFY_PLAYLIST_ID, ['spotify:track:' + track.id])
+              .then(function(data) {
+
+
+                request({
+                  url: req.body.response_url,
+                  method: "POST",
+                  json: true,
+                  headers: {
+                      "content-type": "application/json",
+                  },
+                  body: 'Track added: *' + track.name + '* by *' + track.artists[0].name + '*'
+
+                  }, function (error, response, body) {
+                  if (!error && response.statusCode === 200) {
+                      callback(body);
+                  }
+                  else {
+                      console.log("error: " + error)
+                      console.log("response.statusCode: " + response.statusCode)
+                      console.log("response.statusText: " + response.statusText)
+                  }
+                });
+              }, function(err) {
+                request({
+                  url: req.body.response_url,
+                  method: "POST",
+                  json: true,
+                  headers: {
+                      "content-type": "application/json",
+                  },
+                  body: err.message
+
+                  }, function (error, response, body) {
+                  if (!error && response.statusCode === 200) {
+                      callback(body);
+                  }
+                  else {
+                      console.log("error: " + error)
+                      console.log("response.statusCode: " + response.statusCode)
+                      console.log("response.statusText: " + response.statusText)
+                  }
+                });
+              });
+          }
         }, function(err) {
           return res.send(err.message);
         });
