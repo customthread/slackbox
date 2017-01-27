@@ -3,8 +3,13 @@ var bodyParser    = require('body-parser');
 var request       = require('request');
 var dotenv        = require('dotenv');
 var SpotifyWebApi = require('spotify-web-api-node');
+var cron = require('node-cron');
 
 dotenv.load();
+
+cron.schedule('*/2 * * * *', function(){
+  request('http://ct-hq-spotify.herokuapp.com')
+});
 
 var spotifyApi = new SpotifyWebApi({
   clientId     : process.env.SPOTIFY_KEY,
@@ -51,19 +56,15 @@ app.use('/store', function(req, res, next) {
 });
 
 app.post('/store', function(req, res) {
-  if (req.body.text.trim().length === 0) {
-    return res.send('Enter the name of a song and the name of the artist, separated by a "-"\nExample: Blue (Da Ba Dee) - Eiffel 65');
-  } else {
-    return res.send('Searching for your requested song...')
-  }
-  
   spotifyApi.refreshAccessToken()
     .then(function(data) {
       spotifyApi.setAccessToken(data.body['access_token']);
       if (data.body['refresh_token']) { 
         spotifyApi.setRefreshToken(data.body['refresh_token']);
       }
-
+      if (req.body.text.trim().length === 0) {
+          return res.send('Enter the name of a song and the name of the artist, separated by a "-"\nExample: Blue (Da Ba Dee) - Eiffel 65');
+      }
       if (req.body.text.indexOf(' - ') === -1) {
         var query = 'track:' + req.body.text;
       } else { 
@@ -74,53 +75,18 @@ app.post('/store', function(req, res) {
         .then(function(data) {
           var results = data.body.tracks.items;
           if (results.length === 0) {
-            request({
-              url: req.body.response_url,
-              method: "POST",
-              json: true,
-              headers: {
-                  "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                text: 'Could not find that track.'
-              })
-
-            }, function (error, response, body) {})
-
-          } else {
-
-            var track = results[0];
-            spotifyApi.addTracksToPlaylist(process.env.SPOTIFY_USERNAME, process.env.SPOTIFY_PLAYLIST_ID, ['spotify:track:' + track.id])
-              .then(function(data) {
-
-                request({
-                  url: req.body.response_url,
-                  method: "POST",
-                  json: true,
-                  headers: {
-                      "content-type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    text: 'Track added: *' + track.name + '* by *' + track.artists[0].name + '*'
-                  })
-
-                }, function (error, response, body) {})
-              }, function(err) {
-                request({
-                  url: req.body.response_url,
-                  method: "POST",
-                  json: true,
-                  headers: {
-                      "content-type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    text: err.message
-                  })
-
-                }, function (error, response, body) {})
-              });
-          };
-      })
+            return res.send('Could not find that track.');
+          }
+          var track = results[0];
+          spotifyApi.addTracksToPlaylist(process.env.SPOTIFY_USERNAME, process.env.SPOTIFY_PLAYLIST_ID, ['spotify:track:' + track.id])
+            .then(function(data) {
+              return res.send('Track added: *' + track.name + '* by *' + track.artists[0].name + '*');
+            }, function(err) {
+              return res.send(err.message);
+            });
+        }, function(err) {
+          return res.send(err.message);
+        });
     }, function(err) {
       return res.send('Could not refresh access token. You probably need to re-authorise yourself from your app\'s homepage.');
     });
