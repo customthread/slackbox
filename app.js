@@ -8,7 +8,7 @@ var cron = require('node-cron');
 dotenv.load();
 
 cron.schedule('*/2 * * * *', function(){
-  request('http://ct-hq-spotify.herokuapp.com')
+  request.get('http://ct-hq-spotify.herokuapp.com').on('response',  function(response) { console.log('Ping heroku...') })
 });
 
 var spotifyApi = new SpotifyWebApi({
